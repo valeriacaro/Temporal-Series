@@ -1,0 +1,572 @@
+---
+title: "METRO"
+author: "Valèria Caro i Jan Sallent"
+date: "12/4/2022"
+output: pdf_document
+---
+
+# SÈRIES TEMPORALS: METRO
+
+## Presentació de la sèrie temporal
+
+```{r}
+serie=ts(read.table("metro.dat"),start=1996,freq=12)
+plot(serie,main="Viatgers del metro de Barcelona",ylab="milers de persones")
+abline(v=1996:2019,lty=3,col=4)
+```
+
+## Transformacions
+
+Anàlisi variància:
+
+```{r}
+m <- apply(matrix(serie, nrow = 12), 2, mean)
+v <- apply(matrix(serie, nrow = 12), 2, var)
+```
+
+```{r}
+plot(v~m)
+```
+
+```{r}
+boxplot(matrix(serie, nrow = 12))
+```
+
+Anàlisi patró estacional:
+
+```{r}
+monthplot(serie)
+ts.plot(matrix(serie, nrow = 12))
+```
+
+Diferenciació estacional:
+
+```{r}
+d12serie <- diff(serie, lag=12)
+```
+
+```{r}
+plot(d12serie)
+```
+
+
+```{r}
+par(mfrow=c(1,2))
+monthplot(d12serie)
+ts.plot(matrix(d12serie, nrow = 12))
+par(mfrow=c(1,1))
+```
+
+
+```{r}
+plot(d12serie)
+```
+
+Anàlisi mitjana
+
+```{r}
+d1d12serie <- diff(d12serie)
+plot(d1d12serie)
+abline(h = mean(d1d12serie), col = 2)
+abline(h = 0)
+```
+
+
+```{r}
+d1d1d12serie <- diff(d1d12serie)
+plot(d1d1d12serie)
+abline(h = mean(d1d1d12serie), col = 2)
+abline(h=0)
+```
+
+Millora variància
+
+```{r}
+var(serie)
+var(d12serie)
+var(d1d12serie)
+var(d1d1d12serie)
+```
+
+
+$$
+Wt = (1-B)(1-B^{12})X_t
+$$
+
+## Proposta de models
+
+
+```{r}
+par(mfrow=c(1,2))
+acf(d1d12serie, ylim=c(-1,1), lag.max=72, col = c(2, rep(1, 11)))
+pacf(d1d12serie, ylim=c(-1,1), lag.max=72, col = c(rep(1, 11),2))
+par(mfrow=c(1,1))
+```
+
+## Ajust de models
+
+### MODEL 1: $ARIMA(0,0,4)(1,0,0)_{12}$
+
+
+```{r}
+(mod1 <- arima(d1d12serie,  order=c(0,0,4), seasonal = list(order = c(1,0,0), period = 12)))
+```
+
+Observem que la mitjana es pot considerar nul·la:
+
+$$
+\hat{t} = |\frac{10.4085}{18.9657}| \approx 0.55 < 2
+$$
+
+Recordem que per a poder considerar no significatiu un paràmetre $\alpha$, ha de passar:
+
+$$
+\hat{t} = |\frac{\hat{\alpha}}{S_{\hat{\alpha}}}| < 2
+$$
+
+Ajustem el model $ARIMA(0,1,4)(1,1,0)_{12}$ respecte $X_t$:
+
+```{r}
+(mod1 <- arima(serie,  order=c(0,1,4), seasonal = list(order = c(1,1,0), period = 12)))
+```
+
+Si fem el t-test respecte $\theta_3$ i $\theta_4$ observem que són paràmetres no significatius:
+
+* $\theta_3$
+
+$$
+\hat{t} = |\frac{0.0508}{0.0909}| \approx 0.56 < 2
+$$
+
+* $\theta_4$
+
+$$
+\hat{t} = |\frac{-0.0753}{0.0635}| \approx 1.19 < 2
+$$
+
+El paràmetre $\theta_2$ també es troba a la frontera entre ser significatiu o no:
+$$
+\hat{t} = |\frac{0.1625}{0.0837}| \approx 1.94 \approx 2
+$$
+
+Tenint en compte els valors obringuts amb els t-tests realitzats, provem d'ajustar el model fixant a zero $\theta_3$ (el paràmetre amb t-ratio més petit):
+
+```{r}
+(mod1 <- arima(serie,  order=c(0,1,4), seasonal = list(order = c(1,1,0), period = 12), fixed = c(NA,NA,0,NA,NA)))
+```
+
+Observem que $\theta_4$ continua sent no significatiu:
+$$
+\hat{t} = |\frac{-0.0512}{0.0463}| \approx 1.11 < 2
+$$
+
+Provem d'ajustar un  $ARIMA(0,1,2)(1,1,0)_{12}$ respecte $X_t$:
+```{r}
+(mod1 <- arima(serie,  order=c(0,1,2), seasonal = list(order = c(1,1,0), period = 12)))
+```
+
+Ara tots els paràmetres són signifcatius, per tant ens quedem amb aquest model:
+
+$$
+(1+0.4184B^{12})W_t = (1-0.8186B + 0.1781B^2)Z_t
+$$
+
+O, equivalentment:
+
+$$
+(1+0.4184B^{12})(1-B)(1-B^{12})X_t = (1-0.8186B + 0.1781B^2)Z_t
+$$
+
+### MODEL 2: $ARIMA(4,0,0)(1,0,0)_{12}$
+
+Comencem ajustant el model proposat respecte $W_t$:
+
+```{r}
+(mod2 <- arima(d1d12serie,  order=c(4,0,0), seasonal = list(order = c(1,0,0), period = 12)))
+```
+
+Observem que la mitjana es pot considerar nul·la:
+
+$$
+\hat{t} = |\frac{11.5703}{22.9235}| \approx 0.50 < 2
+$$
+
+Per tant, ajustem el model $ARIMA(4,1,0)(1,1,0)_{12}$ respecte $X_t$:
+
+```{r}
+(mod2 <- arima(serie,  order=c(4,1,0), seasonal = list(order = c(1,1,0), period = 12)))
+```
+
+Observem que tots els paràmetres són signifcatius, per tant ens quedem amb el model següent
+
+$$
+(1+0.8015B+0.4704B^2+0.1627B^3+0.1304B^4)(1+0.1462B^{12})W_t = Z_t
+$$
+
+$$
+(1+0.8015B+0.4704B^2+0.1627B^3+0.1304B^4)(1+0.1462B^{12})(1-B)(1-B^{12})X_t = Z_t
+$$
+
+## Validació de models
+
+### Validació del primer model
+
+Variància constant?
+
+```{r}
+par(mfrow=c(1,2))
+residus1 <- residuals(mod1)
+plot(residus1); abline(h=0); abline(h=c(-3*sd(residus1),3*sd(residus1)),lty=3,col=4)
+scatter.smooth(sqrt(abs(residus1)), lpars=list(col=2))
+par(mfrow=c(1,1))
+```
+
+Distribució normal?
+
+```{r}
+qqnorm(residus1); qqline(residus1,col=2,lwd=2)
+hist(residus1,breaks=20, freq=FALSE); curve(dnorm(x, mean=mean(residus1), sd=sd(residus1)), col=2, add=T)
+shapiro.test(residus1)
+```
+
+Independència residus?
+
+```{r}
+par(mfrow=c(1,2))
+acf(residus1, ylim=c(-1,1), lag.max=72, col = c(2, rep(1, 11)))
+pacf(residus1, ylim=c(-1,1), lag.max=72, col = c(rep(1, 11),2))
+tsdiag(mod1,gof.lag=72)
+```
+
+AR i MA infinits
+
+```{r}
+library('astsa')
+ARMAtoMA(c(1, -mod1$model$phi), c(1, mod1$model$theta), 20)
+ARMAtoAR(c(1, mod1$model$theta), c(1, -mod1$model$phi), 20)
+```
+
+Seguim ara calculant els moduls de les arrels dels polinomis característics:
+
+```{r}
+Mod(polyroot(c(1,mod1$model$phi)));
+Mod(polyroot(c(1,mod1$model$theta)));
+```
+
+Calculem ara els valors de l'AIC i el BIC.
+
+```{r}
+AIC(mod1) 
+BIC(mod1)
+```
+
+Model estable?
+
+```{r}
+ultim=c(2017,12); 
+serie2=window(serie, end=ultim)
+sqserie2 = sqrt(serie2)
+(mod1)
+(model2 <- arima(sqserie2,  order=c(0,1,2), seasonal = list(order = c(1,1,0), period = 12)))
+``` 
+
+
+Predicció de les últimes 12 mostres:
+
+```{r}
+pred <- predict(model2, n.ahead=12)
+p = (pred$pred)^2
+tl <- (pred$pred-1.96*pred$se)^2
+tu <- (pred$pred+1.96*pred$se)^2
+primer=c(2014,1); 
+serie3=window(serie, start=primer)
+ts.plot(serie3,tl,tu,p,lty=c(1,2,2,1),col=c(1,4,4,2),xlim=c(2014,2019),type="o"); abline(v=2014:2019,lty=3,col=4)
+```
+
+
+Finalment calculem el RMSPE, el MAPE i la mitjana dels intervals de les prediccions:
+
+```{r}
+primer=c(2018,1)
+obs = window(serie, start=primer)
+(RMSPE=sqrt(mean(((obs-p)/obs)^2))) 
+(MAPE=mean(abs(obs-p)/obs))
+```
+
+
+Calculem la mitjana dels intervals de predicció i observem que són molt amplis:
+
+```{r}
+mean(tu-tl)
+```
+
+### Validació del segon model
+
+Variància constant?
+
+```{r}
+par(mfrow=c(1,2))
+residus2 <- residuals(mod2)
+plot(residus2); abline(h=0); abline(h=c(-3*sd(residus2),3*sd(residus2)),lty=3,col=4)
+scatter.smooth(sqrt(abs(residus2)), lpars=list(col=2))
+par(mfrow=c(1,1))
+```
+
+Distribució normal?  
+
+```{r}
+qqnorm(residus2); qqline(residus2,col=2,lwd=2)
+hist(residus2,breaks=20, freq=FALSE); curve(dnorm(x, mean=mean(residus2), sd=sd(residus2)), col=2, add=T)
+shapiro.test(residus2)
+```
+
+Independència residus?
+
+```{r}
+par(mfrow=c(1,2))
+acf(residus2, ylim=c(-1,1), lag.max=72, col = c(2, rep(1, 11)))
+pacf(residus2, ylim=c(-1,1), lag.max=72, col = c(rep(1, 11),2))
+tsdiag(mod2,gof.lag=72)
+```
+
+AR i MA infinits:
+
+```{r}
+ARMAtoMA(c(1, -mod2$model$phi), c(1, mod2$model$theta), 20)
+ARMAtoAR(c(1, mod2$model$theta), c(1, -mod2$model$phi), 20)
+```
+
+Seguim ara calculant els moduls de les arrels dels polinomis característics.
+
+```{r}
+Mod(polyroot(c(1,mod2$model$phi)));
+Mod(polyroot(c(1,mod2$model$theta)));
+```
+ 
+AIC i BIC
+
+```{r}
+AIC(mod2) 
+BIC(mod2)
+```
+
+Model estable?
+
+```{r}
+ultim=c(2017,12); 
+serie2=window(serie, end=ultim)
+sqserie2 = sqrt(serie2)
+(mod2)
+(model2 <- arima(sqserie2,  order=c(4,1,0), seasonal = list(order = c(1,1,0), period = 12)))
+``` 
+
+
+Predicció de les últmes 12 mostres:
+
+```{r}
+pred <- predict(model2, n.ahead=12)
+p = (pred$pred)^2
+tl <- (pred$pred-1.96*pred$se)^2
+tu <- (pred$pred+1.96*pred$se)^2
+primer=c(2014,1); 
+serie3=window(serie, start=primer)
+ts.plot(serie3,tl,tu,p,lty=c(1,2,2,1),col=c(1,4,4,2),xlim=c(2014,2019),type="o"); abline(v=2014:2019,lty=3,col=4)
+```
+
+
+Finalment calculem el RMSPE, el MAPE i la mitjana dels intervals de les prediccions:
+
+```{r}
+primer=c(2018,1)
+obs = window(serie, start=primer)
+(RMSPE=sqrt(mean(((obs-p)/obs)^2))) 
+(MAPE=mean(abs(obs-p)/obs))
+```
+
+
+```{r}
+mean(tu-tl)
+```
+
+
+## Previsions amb model 1
+
+```{r}
+pred <- predict(mod1, n.ahead=12)
+p = (pred$pred)
+tl <- (pred$pred-1.96*pred$se)
+tu <- (pred$pred+1.96*pred$se)
+ts.plot(serie,tl,tu,p,lty=c(1,2,2,1),col=c(1,4,4,2),xlim=c(2014,2020),type="o"); abline(v=2014:2020,lty=3,col=4)
+```
+
+## Tractament d'atípics
+
+
+Comencem analitzant quin tipus d'atípics s'hi observen:
+
+```{r}
+source("atipics2.R")
+(mod.atip = outdetec(mod1, dif = c(1, 12), crit=2.9, LS = T))
+str(mod.atip)
+atipics = mod.atip$atip[order(mod.atip$atip[,1]),]
+atipics
+```
+
+Comparació de la sèrie i la sèrie linealitzada
+
+```{r}
+serie.lin=lineal(serie,mod.atip$atip)
+plot(serie)
+lines((serie.lin),col=2)
+```
+
+Transformacions:
+
+```{r}
+monthplot(serie.lin)
+ts.plot(matrix(serie.lin, nrow = 12))
+```
+
+```{r}
+d12serie.lin = diff(serie.lin,12)
+plot(d12serie.lin)
+```
+
+```{r}
+d1d12serie.lin = diff(d12serie.lin)
+plot(d1d12serie.lin)
+abline(h = mean(d1d1d12serie), col = 2)
+abline(h=0)
+```
+
+```{r}
+var(serie.lin)
+var(d12serie.lin)
+var(d1d12serie.lin)
+```
+
+ACF i PACF
+
+```{r}
+par(mfrow=c(1,2))
+acf(d12serie.lin, ylim=c(-1,1), lag.max=72, col = c(2, rep(1, 11)))
+pacf(d12serie.lin, ylim=c(-1,1), lag.max=72, col = c(rep(1, 11),2))
+```
+
+## Ajust model
+
+Observant el PACF i ACF de la sèrie linealitzada (estacionalitzada) veiem que als retards regulars de l'ACF són infinits per tant nomès en fixem en el PACF i agafem 4 retards. Pel que fa als retards estacionals ens fixem només en l'ACF perquè el PACF no té cap retard. Per tant, ens quedem amb el model: $ARIMA(3,0,0)(4,1,0)_{12}$
+
+```{r}
+(mod1 <- arima(d12serie.lin,  order=c(3,0,0), seasonal = list(order = c(4,0,0), period = 12)))
+```
+
+Prenem la mitjana com a nul·la.
+
+```{r}
+(mod1 <- arima(serie.lin,  order=c(3,0,0), seasonal = list(order = c(4,1,0), period = 12)))
+```
+
+Veiem que ara tots els paràmetres són significatius per tant ens quedem amb aquest model.
+
+## Validació del model
+
+Comencem fent el plot dels residus i el de l'arrel quadrada dels seus valors absoluts amb ajust suau:
+
+```{r}
+residus1 <- residuals(mod1)
+plot(residus1); abline(h=0); abline(h=c(-3*sd(residus1),3*sd(residus1)),lty=3,col=4)
+scatter.smooth(sqrt(abs(residus1)), lpars=list(col=2))
+```
+
+Veiem clarament que la variància és constant i cap residu surt fora de l'interval de confiança.
+
+Procedim ara a fer l'anàlisi de la normalitat dels residus amb el plot de la normalitat, l'histograma amb la corba normal superposada i el test de Shapiro-Wilks.    
+
+```{r}
+qqnorm(residus1); qqline(residus1,col=2,lwd=2)
+hist(residus1,breaks=20, freq=FALSE); curve(dnorm(x, mean=mean(residus1), sd=sd(residus1)), col=2, add=T)
+shapiro.test(residus1)
+```
+
+Clarament veiem que els residus s'ajusten tant a la recta normal com a la distribució normal. A més a més el test de Shapiro-Wilk és molt superior al 0.05 per tant acceptem normalitat dels residus.
+
+```{r}
+par(mfrow=c(1,2))
+acf(residus1, ylim=c(-1,1), lag.max=72, col = c(2, rep(1, 11)))
+pacf(residus1, ylim=c(-1,1), lag.max=72, col = c(rep(1, 11),2))
+tsdiag(mod1,gof.lag=72)
+```
+
+Veiem però que seguim sense poder acceptar independència dels residus perquè hi ha molts retards significatius i el Ljung-Box té molts valors per sota del llindà del 0.05 
+
+Seguim ara calculant els moduls de les arrels dels polinomis característics.
+
+```{r}
+library('astsa')
+ARMAtoMA(c(1, -mod1$model$phi), c(1, mod1$model$theta), 20)
+ARMAtoAR(c(1, mod1$model$theta), c(1, -mod1$model$phi), 20)
+```
+```{r}
+Mod(polyroot(c(1,mod1$model$phi)));
+Mod(polyroot(c(1,mod1$model$theta)));
+```
+
+
+Les arrels dels polinomis són majors que 1 per tant el model és tan causal com invertible.
+
+Calculem ara els valors de l'AIC i el BIC.
+
+```{r}
+AIC(mod1) 
+BIC(mod1)
+```
+Veiem que són lleugermant menors que en els models anterios tal com caldria esperar perquè ara no hi han outliers.
+
+```{r}
+ultim=c(2017,12); 
+serie2=window(serie.lin, end=ultim)
+(mod1)
+(model2 <- arima(serie2,  order=c(0,1,4), seasonal = list(order = c(2,1,0), period = 12), fixed = c(NA,0,NA,NA,NA,NA)))
+``` 
+
+Els valors dels paràmetres pràcticament no canvien per tant veiem que el model és molt estable
+
+Fem la predicció de les 12 últimes mostres
+
+```{r}
+pred <- predict(model2, n.ahead=12)
+p = (pred$pred)^2
+tl <- (pred$pred-1.96*pred$se)^2
+tu <- (pred$pred+1.96*pred$se)^2
+primer=c(2014,1); 
+serie3=window((serie.lin)^2, start=primer)
+ts.plot(serie3,tl,tu,p,lty=c(1,2,2,1),col=c(1,4,4,2),xlim=c(2014,2019),type="o"); abline(v=2014:2019,lty=3,col=4)
+```
+
+Veiem com ara les prediccions estan bastant més ben ajustades que en els models anteriors
+
+Finalment calculem el RMSPE, el MAPE i la mitjana dels intervals de les prediccions:
+
+```{r}
+primer=c(2018,1)
+obs = window((serie.lin)^2, start=primer)
+(RMSPE=sqrt(mean(((obs-p)/obs)^2))) 
+(MAPE=mean(abs(obs-p)/obs))
+```
+Els valors de RMSPE i MAPE són propers a 0.1 per tant les prediccions són molt bones.
+
+```{r}
+mean(tu-tl)
+```
+
+
+## Previsions
+
+```{r}
+pred <- predict(mod1, n.ahead=12)
+p = (pred$pred)
+tl <- (pred$pred-1.96*pred$se)
+tu <- (pred$pred+1.96*pred$se)
+ts.plot(serie.lin,tl,tu,p,lty=c(1,2,2,1),col=c(1,4,4,2),xlim=c(2014,2020),type="o"); abline(v=2014:2020,lty=3,col=4)
+```
